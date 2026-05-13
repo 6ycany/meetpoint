@@ -1,7 +1,6 @@
 package com.example.meetpoint.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,7 +31,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.meetpoint.domain.model.TravelMode
@@ -48,18 +46,17 @@ fun HomeScreen(
     val personInputs by viewModel.personInputs.collectAsState()
     val travelMode by viewModel.travelMode.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val members by viewModel.members.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // 計算成功 → 結果画面へ遷移
     LaunchedEffect(uiState) {
-        if (uiState is AppViewModel.UiState.Success) {
-            onNavigateToResult()
-        }
-        if (uiState is AppViewModel.UiState.Error) {
-            snackbarHostState.showSnackbar(
-                message = (uiState as AppViewModel.UiState.Error).message
-            )
-            viewModel.resetResult()
+        when (uiState) {
+            is AppViewModel.UiState.Success -> onNavigateToResult()
+            is AppViewModel.UiState.Error -> {
+                snackbarHostState.showSnackbar((uiState as AppViewModel.UiState.Error).message)
+                viewModel.resetResult()
+            }
+            else -> {}
         }
     }
 
@@ -85,39 +82,32 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // --- 参加者入力カード ---
             personInputs.forEachIndexed { index, input ->
                 PersonInputCard(
                     index = index,
                     name = input.name,
                     address = input.address,
+                    hasCoordinates = input.hasCoordinates,
+                    members = members,
                     canRemove = personInputs.size > 2,
                     onNameChange = { viewModel.updatePersonName(index, it) },
                     onAddressChange = { viewModel.updatePersonAddress(index, it) },
+                    onMemberSelect = { viewModel.selectMember(index, it) },
                     onRemove = { viewModel.removePerson(index) }
                 )
             }
 
-            // --- 参加者追加ボタン ---
             if (personInputs.size < 4) {
                 OutlinedButton(
                     onClick = { viewModel.addPerson() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(text = "　参加者を追加")
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("　参加者を追加")
                 }
             }
 
-            // --- 移動手段選択 ---
-            Text(
-                text = "移動手段",
-                style = MaterialTheme.typography.titleSmall
-            )
+            Text("移動手段", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = travelMode == TravelMode.DRIVE,
@@ -133,14 +123,11 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // --- 計算ボタン ---
             val isLoading = uiState is AppViewModel.UiState.Loading
             Button(
                 onClick = { viewModel.calculate() },
                 enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
+                modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -149,10 +136,9 @@ fun HomeScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text(text = "合流地点を探す")
+                    Text("合流地点を探す")
                 }
             }
-
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

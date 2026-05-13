@@ -2,6 +2,7 @@ package com.example.meetpoint.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
@@ -18,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.meetpoint.ui.AppViewModel
 import com.example.meetpoint.ui.MemberViewModel
+import com.example.meetpoint.ui.screen.HelpScreen
 import com.example.meetpoint.ui.screen.HomeScreen
 import com.example.meetpoint.ui.screen.MemberScreen
 import com.example.meetpoint.ui.screen.ResultScreen
@@ -26,6 +28,7 @@ object Destinations {
     const val HOME = "home"
     const val RESULT = "result"
     const val MEMBERS = "members"
+    const val HELP = "help"
 }
 
 @Composable
@@ -66,6 +69,17 @@ fun AppNavGraph(
                         icon = { Icon(Icons.Default.Person, contentDescription = null) },
                         label = { Text("メンバー") }
                     )
+                    NavigationBarItem(
+                        selected = currentRoute == Destinations.HELP,
+                        onClick = {
+                            navController.navigate(Destinations.HELP) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Default.Info, contentDescription = null) },
+                        label = { Text("ヘルプ") }
+                    )
                 }
             }
         }
@@ -89,6 +103,9 @@ fun AppNavGraph(
             }
             composable(Destinations.MEMBERS) {
                 MemberScreen(viewModel = memberViewModel)
+            }
+            composable(Destinations.HELP) {
+                HelpScreen()
             }
         }
     }

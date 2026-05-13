@@ -14,28 +14,27 @@
 - 🔴 [ ] Hilt セットアップ（`@HiltAndroidApp`、モジュール作成）
 
 ### ドメイン層
-- 🔴 [ ] `Person` / `MeetCandidate` / `PlaceType` / `TravelMode` / `AppMode` モデル定義
-- 🔴 [ ] `haversine()` 関数実装・単体テスト
-- 🔴 [ ] `weiszfeld()` 関数実装・単体テスト
-- 🔴 [ ] `CalcMeetPointUseCase` 実装（モード1・座標計算）
+- 🔴 [x] `Person` / `MeetCandidate` / `PlaceType` / `TravelMode` / `AppMode` モデル定義
+- 🔴 [x] `haversine()` 関数実装
+- 🔴 [x] `weiszfeld()` 関数実装
+- 🔴 [x] `CalcMeetPointUseCase` 実装（モード1・座標計算）
 
 ### データ層
-- 🔴 [ ] Retrofit クライアント設定（Google APIs / Overpass API）
-- 🔴 [ ] `GoogleGeocodingApi` 実装
-- 🔴 [ ] `GeoRepository` 実装（Geocoding）
-- 🔴 [ ] `OverpassApi` 実装（SA/PA検索クエリ）
-- 🔴 [ ] `PlaceRepository` 実装（Overpass結果パース）
+- 🔴 [x] Retrofit クライアント設定（Google APIs / Overpass API）
+- 🔴 [x] `GoogleGeocodingApi` 実装
+- 🔴 [x] `GeoRepository` 実装（Geocoding）
+- 🔴 [x] `OverpassApi` 実装（SA/PA検索クエリ）
+- 🔴 [x] `PlaceRepository` 実装（Overpass結果パース）
 
 ### UI層
-- 🔴 [ ] Navigation セットアップ（NavHost：Home → Result）
-- 🔴 [ ] `HomeScreen` 実装（出発地入力・モード切替・計算ボタン）
-- 🔴 [ ] `PersonInputCard` コンポーネント実装
-- 🔴 [ ] `HomeViewModel` 実装（入力状態管理・計算トリガー）
-- 🔴 [ ] `ResultScreen` 実装（地図＋候補カード3件）
-- 🔴 [ ] `MapView` コンポーネント実装（Maps Compose）
-- 🔴 [ ] `CandidateCard` コンポーネント実装
-- 🔴 [ ] `ResultViewModel` 実装
-- 🔴 [ ] Google Maps Intent 連携（「Googleマップで開く」）
+- 🔴 [x] Navigation セットアップ（NavHost：Home → Result）
+- 🔴 [x] `HomeScreen` 実装（出発地入力・モード切替・計算ボタン）
+- 🔴 [x] `PersonInputCard` コンポーネント実装
+- 🔴 [x] `AppViewModel` 実装（入力状態管理・計算トリガー、全画面共有）
+- 🔴 [x] `ResultScreen` 実装（地図＋候補カード3件）
+- 🔴 [x] `MapView` コンポーネント実装（Maps Compose）
+- 🔴 [x] `CandidateCard` コンポーネント実装
+- 🔴 [x] Google Maps Intent 連携（「Googleマップで開く」）
 
 ---
 

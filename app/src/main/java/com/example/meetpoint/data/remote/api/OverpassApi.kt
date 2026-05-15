@@ -24,17 +24,20 @@ fun buildSaPaQuery(lat: Double, lon: Double, radiusKm: Int = 50): String {
         (
           node["highway"="services"](around:$radius,$lat,$lon);
           way["highway"="services"](around:$radius,$lat,$lon);
+          node["amenity"="fuel"]["name"~"SA|サービスエリア"](around:$radius,$lat,$lon);
         );
-        out center;
+        out center 20;
     """.trimIndent()
 }
 
 /** 主要駅検索クエリ（中心座標から半径radiusKm km以内） */
-fun buildStationQuery(lat: Double, lon: Double, radiusKm: Int = 50): String {
+fun buildStationQuery(lat: Double, lon: Double, radiusKm: Int = 80): String {
     val radius = radiusKm * 1000
     return """
         [out:json][timeout:25];
-        node["railway"="station"](around:$radius,$lat,$lon);
-        out body;
+        (
+          node["railway"="station"]["name"](around:$radius,$lat,$lon);
+        );
+        out 30;
     """.trimIndent()
 }

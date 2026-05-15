@@ -6,10 +6,12 @@ import com.example.meetpoint.data.local.entity.MemberEntity
 import com.example.meetpoint.data.repository.GeoRepository
 import com.example.meetpoint.data.repository.MemberRepository
 import com.example.meetpoint.data.repository.PlaceRepository
+import com.example.meetpoint.domain.model.AppMode
 import com.example.meetpoint.domain.model.MeetCandidate
 import com.example.meetpoint.domain.model.Person
 import com.example.meetpoint.domain.model.TravelMode
 import com.example.meetpoint.domain.usecase.CalcMeetPointUseCase
+import com.example.meetpoint.domain.usecase.CalcWaypointUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,6 +26,7 @@ class AppViewModel @Inject constructor(
     private val geoRepository: GeoRepository,
     private val placeRepository: PlaceRepository,
     private val calcMeetPointUseCase: CalcMeetPointUseCase,
+    private val calcWaypointUseCase: CalcWaypointUseCase,
     memberRepository: MemberRepository
 ) : ViewModel() {
 
@@ -53,6 +56,17 @@ class AppViewModel @Inject constructor(
 
     private val _travelMode = MutableStateFlow(TravelMode.DRIVE)
     val travelMode: StateFlow<TravelMode> = _travelMode.asStateFlow()
+
+    private val _appMode = MutableStateFlow(AppMode.MEET_ONLY)
+    val appMode: StateFlow<AppMode> = _appMode.asStateFlow()
+
+    /** モード2の目的地入力 */
+    private val _destination = MutableStateFlow(PersonInput("目的地"))
+    val destination: StateFlow<PersonInput> = _destination.asStateFlow()
+
+    /** モード2のαウェイト（0〜1）。β = 1 - α */
+    private val _alpha = MutableStateFlow(0.5f)
+    val alpha: StateFlow<Float> = _alpha.asStateFlow()
 
     // --- UI状態 ---
 
@@ -106,6 +120,14 @@ class AppViewModel @Inject constructor(
 
     fun setTravelMode(mode: TravelMode) { _travelMode.value = mode }
 
+    fun setAppMode(mode: AppMode) { _appMode.value = mode }
+
+    fun updateDestinationAddress(address: String) {
+        _destination.value = _destination.value.copy(address = address, latitude = null, longitude = null)
+    }
+
+    fun setAlpha(value: Float) { _alpha.value = value.coerceIn(0f, 1f) }
+
     fun resetResult() { _uiState.value = UiState.Idle }
 
     // --- 計算 ---
@@ -117,6 +139,12 @@ class AppViewModel @Inject constructor(
             val inputs = _personInputs.value
             if (inputs.any { it.address.isBlank() }) {
                 _uiState.value = UiState.Error("全員の出発地を入力してください")
+                return@launch
+            }
+
+            // モード2で目的地未入力チェック
+            if (_appMode.value == AppMode.WAYPOINT && _destination.value.address.isBlank()) {
+                _uiState.value = UiState.Error("目的地を入力してください")
                 return@launch
             }
 
@@ -142,7 +170,37 @@ class AppViewModel @Inject constructor(
                 TravelMode.TRANSIT -> placeRepository.searchStations(center.latitude, center.longitude)
             }
 
-            val candidates = calcMeetPointUseCase(validPersons, rawCandidates, topN = 3)
+            val candidates = when (_appMode.value) {
+                AppMode.MEET_ONLY -> {
+                    calcMeetPointUseCase(validPersons, rawCandidates, topN = 3)
+                }
+                AppMode.WAYPOINT -> {
+                    // 目的地をジオコーディング（キャッシュがあればスキップ）
+                    val destInput = _destination.value
+                    val destPerson = if (destInput.hasCoordinates) {
+                        Person("目的地", destInput.latitude!!, destInput.longitude!!, destInput.address)
+                    } else {
+                        geoRepository.resolvePerson("目的地", destInput.address)
+                    }
+                    if (destPerson == null) {
+                        _uiState.value = UiState.Error("目的地の住所を認識できませんでした。\n再度確認してください。")
+                        return@launch
+                    }
+                    // ジオコーディング結果をキャッシュ
+                    _destination.value = _destination.value.copy(
+                        latitude = destPerson.latitude,
+                        longitude = destPerson.longitude
+                    )
+                    calcWaypointUseCase(
+                        persons = validPersons,
+                        destination = destPerson,
+                        candidates = rawCandidates,
+                        alpha = _alpha.value.toDouble(),
+                        topN = 3
+                    )
+                }
+            }
+
             _uiState.value = UiState.Success(candidates, validPersons)
         }
     }

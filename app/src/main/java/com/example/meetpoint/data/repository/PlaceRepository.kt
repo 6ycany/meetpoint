@@ -13,15 +13,26 @@ import javax.inject.Inject
 
 private const val TAG = "PlaceRepository"
 
-/** 出発地から近すぎる候補を除外する最小距離（km） */
-private const val MIN_DIST_FROM_PERSON_KM = 0.3
+/**
+ * 出発地から近すぎる候補を除外する最小距離（km）。
+ * 50m 未満 = GPS 誤差レベル。完全に同地点の場合のみ除外。
+ */
+private const val MIN_DIST_FROM_PERSON_KM = 0.05
+
+/** 重複駅をまとめる近接閾値（km）。この距離以内は同一駅とみなす */
+private const val STATION_DEDUP_KM = 0.3
 
 class PlaceRepository @Inject constructor(
     private val overpassApi: OverpassApi
 ) {
+
+    // ─────────────────────────────────────────────
+    // SA/PA 検索
+    // ─────────────────────────────────────────────
+
     /**
-     * SA/PA候補を取得する。0件なら1.5倍半径でリトライ（SPEC準拠）。
-     * 出発地から近すぎる候補は除外。
+     * 重心周辺の SA/PA を取得する。
+     * 0件なら 1.5 倍半径でリトライ（SPEC準拠）。
      */
     suspend fun searchSaPa(
         centerLat: Double,
@@ -62,7 +73,7 @@ class PlaceRepository @Inject constructor(
                     address = buildAddress(element)
                 )
             }
-            .filter { candidate -> isFarEnoughFromPersons(candidate, persons) }
+            .filter { isFarEnoughFromPersons(it, persons) }
             .sortedBy { haversine(centerLat, centerLon, it.latitude, it.longitude) }
             .take(maxResults)
     }.getOrElse { e ->
@@ -70,23 +81,81 @@ class PlaceRepository @Inject constructor(
         emptyList()
     }
 
+    // ─────────────────────────────────────────────
+    // 駅検索
+    // ─────────────────────────────────────────────
+
     /**
-     * 駅候補を取得する。0件なら1.5倍半径でリトライ（SPEC準拠）。
-     * 出発地から近すぎる候補は除外。
+     * 各参加者の周辺駅を個別に検索してマージする。
+     *
+     * 重心1点から検索する方式だと Overpass が0件を返しやすいため、
+     * 各人の出発地周辺（半径30km）を個別に検索して重複除去後に集約する。
+     * 0件なら半径を50kmに広げてリトライ。
      */
     suspend fun searchStations(
         centerLat: Double,
         centerLon: Double,
         persons: List<Person> = emptyList(),
-        radiusKm: Int = 80,
+        radiusKm: Int = 80,          // 後方互換のため残す（centroid検索用）
         maxResults: Int = 30
     ): List<MeetCandidate> {
-        val result = queryStations(centerLat, centerLon, persons, radiusKm, maxResults)
-        if (result.isNotEmpty()) return result
+        return if (persons.isNotEmpty()) {
+            searchStationsNearPersons(persons, centerLat, centerLon, maxResults)
+        } else {
+            // persons が空なら従来通り centroid から検索
+            val result = queryStations(centerLat, centerLon, persons, radiusKm, maxResults)
+            if (result.isNotEmpty()) result
+            else {
+                val retryRadius = (radiusKm * 1.5).toInt()
+                Log.w(TAG, "駅 0件 → 半径を ${radiusKm}km から ${retryRadius}km に拡大してリトライ")
+                queryStations(centerLat, centerLon, persons, retryRadius, maxResults)
+            }
+        }
+    }
 
-        val retryRadius = (radiusKm * 1.5).toInt()
-        Log.w(TAG, "駅 0件 → 半径を ${radiusKm}km から ${retryRadius}km に拡大してリトライ")
-        return queryStations(centerLat, centerLon, persons, retryRadius, maxResults)
+    /**
+     * 各参加者の周辺駅を個別に検索して重複除去し、重心に近い順でソートする。
+     *
+     * 1. 各人の周辺 perPersonRadiusKm 以内の駅を取得
+     * 2. 全結果を合算して近接重複（0.3km以内）を除去
+     * 3. 出発地に近すぎる（0.05km未満）候補を除外
+     * 4. 重心からの距離でソートして返す
+     */
+    private suspend fun searchStationsNearPersons(
+        persons: List<Person>,
+        centerLat: Double,
+        centerLon: Double,
+        maxResults: Int,
+        perPersonRadiusKm: Int = 30
+    ): List<MeetCandidate> {
+        val allStations = mutableListOf<MeetCandidate>()
+
+        for (person in persons) {
+            val result = queryStations(
+                centerLat = person.latitude,
+                centerLon = person.longitude,
+                persons = emptyList(), // 個別検索では近接フィルタを後でまとめてかける
+                radiusKm = perPersonRadiusKm,
+                maxResults = 30
+            )
+            Log.d(TAG, "${person.name}周辺の駅: ${result.size}件 (半径${perPersonRadiusKm}km)")
+            allStations.addAll(result)
+        }
+
+        if (allStations.isEmpty()) {
+            // 全員の周辺でも0件 → 重心から広域検索
+            Log.w(TAG, "全参加者周辺で駅0件 → 重心から半径100kmで再検索")
+            allStations.addAll(
+                queryStations(centerLat, centerLon, emptyList(), 100, 50)
+            )
+        }
+
+        return allStations
+            .deduplicateByProximity(STATION_DEDUP_KM)
+            .filter { isFarEnoughFromPersons(it, persons) }
+            .sortedBy { haversine(centerLat, centerLon, it.latitude, it.longitude) }
+            .also { Log.d(TAG, "最終的な駅候補: ${it.size}件") }
+            .take(maxResults)
     }
 
     private suspend fun queryStations(
@@ -97,9 +166,9 @@ class PlaceRepository @Inject constructor(
         maxResults: Int
     ): List<MeetCandidate> = runCatching {
         val query = buildStationQuery(centerLat, centerLon, radiusKm)
-        Log.d(TAG, "駅検索: 半径=${radiusKm}km, center=($centerLat, $centerLon)")
+        Log.d(TAG, "駅クエリ実行: 半径=${radiusKm}km, center=($centerLat, $centerLon)")
         val response = overpassApi.query(query)
-        Log.d(TAG, "駅 レスポンス件数: ${response.elements.size}")
+        Log.d(TAG, "駅レスポンス: ${response.elements.size}件")
 
         response.elements
             .filter { it.effectiveLat != null && it.effectiveLon != null }
@@ -112,35 +181,48 @@ class PlaceRepository @Inject constructor(
                     address = buildAddress(element)
                 )
             }
-            .filter { candidate -> isFarEnoughFromPersons(candidate, persons) }
-            .also { Log.d(TAG, "フィルタ後の駅件数: ${it.size}") }
-            .sortedBy { haversine(centerLat, centerLon, it.latitude, it.longitude) }
+            .filter { isFarEnoughFromPersons(it, persons) }
             .take(maxResults)
     }.getOrElse { e ->
-        Log.e(TAG, "駅検索エラー: ${e.message}", e)
+        Log.e(TAG, "駅クエリエラー: ${e.message}", e)
         emptyList()
     }
 
-    /** OSM タグから住所文字列を組み立てる */
-    private fun buildAddress(element: OverpassElement): String {
-        val tags = element.tags ?: return ""
-        // addr:full が最優先
-        tags["addr:full"]?.let { return it }
-        // 都道府県 + 市区町村 + 番地で組み立て
-        val prefecture = tags["addr:province"] ?: tags["addr:prefecture"] ?: ""
-        val city = tags["addr:city"] ?: tags["addr:county"] ?: ""
-        val suburb = tags["addr:suburb"] ?: tags["addr:quarter"] ?: ""
-        val street = tags["addr:street"] ?: ""
-        val housenumber = tags["addr:housenumber"] ?: ""
-        val parts = listOf(prefecture, city, suburb, street, housenumber).filter { it.isNotBlank() }
-        return parts.joinToString("")
+    // ─────────────────────────────────────────────
+    // ユーティリティ
+    // ─────────────────────────────────────────────
+
+    /** 候補リストから近接重複を除去する（greedy approach） */
+    private fun List<MeetCandidate>.deduplicateByProximity(thresholdKm: Double): List<MeetCandidate> {
+        val result = mutableListOf<MeetCandidate>()
+        for (candidate in this) {
+            val isDuplicate = result.any { existing ->
+                haversine(existing.latitude, existing.longitude, candidate.latitude, candidate.longitude) < thresholdKm
+            }
+            if (!isDuplicate) result.add(candidate)
+        }
+        return result
     }
 
-    /** 候補地点がいずれかの出発地から十分離れているかチェック */
+    /** 候補がいずれかの出発地から十分に離れているかチェック */
     private fun isFarEnoughFromPersons(candidate: MeetCandidate, persons: List<Person>): Boolean {
         if (persons.isEmpty()) return true
         return persons.all { person ->
             haversine(person.latitude, person.longitude, candidate.latitude, candidate.longitude) >= MIN_DIST_FROM_PERSON_KM
         }
+    }
+
+    /** OSM タグから住所文字列を組み立てる */
+    private fun buildAddress(element: OverpassElement): String {
+        val tags = element.tags ?: return ""
+        tags["addr:full"]?.let { return it }
+        val parts = listOf(
+            tags["addr:province"] ?: tags["addr:prefecture"] ?: "",
+            tags["addr:city"] ?: tags["addr:county"] ?: "",
+            tags["addr:suburb"] ?: tags["addr:quarter"] ?: "",
+            tags["addr:street"] ?: "",
+            tags["addr:housenumber"] ?: ""
+        ).filter { it.isNotBlank() }
+        return parts.joinToString("")
     }
 }

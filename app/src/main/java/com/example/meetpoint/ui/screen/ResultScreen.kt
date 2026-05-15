@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.meetpoint.domain.model.AppMode
+import com.example.meetpoint.domain.model.TravelMode
 import com.example.meetpoint.ui.AppViewModel
 import com.example.meetpoint.ui.component.CandidateCard
 import com.example.meetpoint.ui.component.MeetPointMapView
@@ -40,14 +42,21 @@ fun ResultScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val personInputs by viewModel.personInputs.collectAsState()
-    val travelMode by viewModel.travelMode.collectAsState()
 
     val success = uiState as? AppViewModel.UiState.Success ?: return
+    val travelMode = success.travelMode
+    val appMode = success.appMode
+
+    val screenTitle = when {
+        appMode == AppMode.WAYPOINT -> "合流→目的地の候補"
+        travelMode == TravelMode.TRANSIT -> "最寄り駅の候補"
+        else -> "SA/PAの候補"
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("合流地点の候補") },
+                title = { Text(screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = {
                         viewModel.resetResult()
@@ -130,7 +139,7 @@ fun ResultScreen(
                             tint = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                         Text(
-                            text = "近くに${if (travelMode.name == "TRANSIT") "駅" else "SA/PA"}が見つからなかったため、" +
+                            text = "近くに${if (travelMode == TravelMode.TRANSIT) "駅" else "SA/PA"}が見つからなかったため、" +
                                     "全員の中間地点を表示しています。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer

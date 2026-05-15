@@ -71,7 +71,8 @@ object NetworkModule {
     @Named("overpass")
     fun provideOverpassRetrofit(@Named("overpass") okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://overpass-api.de/")
+            // overpass.kumi.systems は overpass-api.de より安定しており rate limit も緩い
+        .baseUrl("https://overpass.kumi.systems/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()

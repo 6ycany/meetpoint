@@ -77,6 +77,8 @@ class AppViewModel @Inject constructor(
         data class Success(
             val candidates: List<MeetCandidate>,
             val persons: List<Person>,
+            val appMode: AppMode = AppMode.MEET_ONLY,
+            val travelMode: TravelMode = TravelMode.DRIVE,
             /** true = Overpassが0件で重心フォールバック使用 */
             val usedFallback: Boolean = false
         ) : UiState()
@@ -212,7 +214,13 @@ class AppViewModel @Inject constructor(
                 }
             }
 
-            _uiState.value = UiState.Success(candidates, validPersons, usedFallback)
+            _uiState.value = UiState.Success(
+                candidates = candidates,
+                persons = validPersons,
+                appMode = _appMode.value,
+                travelMode = _travelMode.value,
+                usedFallback = usedFallback
+            )
         }
     }
 }

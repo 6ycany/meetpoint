@@ -145,8 +145,13 @@ class PlaceRepository @Inject constructor(
         maxResults: Int,
         tag: String
     ): List<MeetCandidate> = runCatching {
-        Log.d(TAG, "[$tag] Overpassリクエスト送信")
+        Log.d(TAG, "[$tag] Overpassリクエスト送信\nquery=\n$query")
         val response = overpassApi.query(query)
+
+        // Overpass がエラーを返した場合は remark にメッセージが入る
+        if (response.remark != null) {
+            Log.w(TAG, "[$tag] Overpass remark: ${response.remark}")
+        }
         Log.d(TAG, "[$tag] レスポンス: ${response.elements.size}件")
 
         response.elements
@@ -166,7 +171,7 @@ class PlaceRepository @Inject constructor(
             .also { Log.d(TAG, "[$tag] 重複除去後: ${it.size}件") }
             .take(maxResults)
     }.getOrElse { e ->
-        Log.e(TAG, "[$tag] エラー: ${e.javaClass.simpleName} — ${e.message}")
+        Log.e(TAG, "[$tag] 例外: ${e.javaClass.simpleName} — ${e.message}", e)
         emptyList()
     }
 

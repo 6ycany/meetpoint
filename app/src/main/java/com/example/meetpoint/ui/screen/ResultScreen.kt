@@ -48,9 +48,10 @@ fun ResultScreen(
     val appMode = success.appMode
 
     val screenTitle = when {
-        appMode == AppMode.WAYPOINT -> "合流→目的地の候補"
+        appMode == AppMode.WAYPOINT && travelMode == TravelMode.TRANSIT -> "合流駅の候補"
+        appMode == AppMode.WAYPOINT -> "合流地点の候補"
         travelMode == TravelMode.TRANSIT -> "最寄り駅の候補"
-        else -> "SA/PAの候補"
+        else -> "合流地点の候補"
     }
 
     Scaffold(
@@ -139,7 +140,7 @@ fun ResultScreen(
                             tint = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                         Text(
-                            text = "近くに${if (travelMode == TravelMode.TRANSIT) "駅" else "SA/PA"}が見つからなかったため、" +
+                            text = "中間地点の近くに駅が見つからなかったため、" +
                                     "全員の中間地点を表示しています。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer

@@ -173,14 +173,19 @@ class AppViewModel @Inject constructor(
             val centroidResult = calcMeetPointUseCase(validPersons, emptyList())
             val center = centroidResult.first()
 
+            // 車: 純粋な中間地点（重心）をそのまま使用。Overpass不要。
+            // 電車: 重心の最寄り駅を検索。
             val rawCandidates = when (_travelMode.value) {
-                TravelMode.DRIVE   -> placeRepository.searchSaPa(center.latitude, center.longitude, validPersons)
-                TravelMode.TRANSIT -> placeRepository.searchStations(center.latitude, center.longitude, validPersons)
+                TravelMode.DRIVE   -> emptyList()
+                TravelMode.TRANSIT -> placeRepository.searchNearestStations(
+                    centerLat = center.latitude,
+                    centerLon = center.longitude
+                )
             }
 
-            val usedFallback = rawCandidates.isEmpty()
+            val usedFallback = _travelMode.value == TravelMode.TRANSIT && rawCandidates.isEmpty()
             if (usedFallback) {
-                Log.w("AppViewModel", "Overpass 候補 0件 → 重心フォールバック使用")
+                Log.w("AppViewModel", "駅が見つからず → 中間地点フォールバック")
             }
 
             val candidates = when (_appMode.value) {

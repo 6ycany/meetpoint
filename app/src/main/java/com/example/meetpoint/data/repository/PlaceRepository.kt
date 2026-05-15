@@ -5,7 +5,6 @@ import com.example.meetpoint.data.remote.api.OverpassApi
 import com.example.meetpoint.data.remote.api.buildSaPaQuery
 import com.example.meetpoint.data.remote.api.buildSaPaQueryMulti
 import com.example.meetpoint.data.remote.api.buildStationQuery
-import com.example.meetpoint.data.remote.api.buildStationQueryMulti
 import com.example.meetpoint.data.remote.dto.OverpassElement
 import com.example.meetpoint.domain.model.MeetCandidate
 import com.example.meetpoint.domain.model.Person
@@ -14,127 +13,84 @@ import com.example.meetpoint.domain.usecase.haversine
 import javax.inject.Inject
 
 private const val TAG = "PlaceRepository"
-
-/** 近接重複とみなす距離（km） */
 private const val DEDUP_KM = 0.3
 
 class PlaceRepository @Inject constructor(
     private val overpassApi: OverpassApi
 ) {
 
-    // ──────────────────────────────────────────
-    //  SA / PA 検索
-    // ──────────────────────────────────────────
+    // ─────────────────────────────────────────
+    // SA/PA 検索（車モード用・将来拡張のため残す）
+    // ─────────────────────────────────────────
 
-    /**
-     * SA/PA を検索する。
-     * - 参加者がいる場合 → 各人の出発地周辺を1リクエストでまとめて検索（80km）
-     * - 0件なら重心から150km でリトライ
-     */
     suspend fun searchSaPa(
         centerLat: Double,
         centerLon: Double,
         persons: List<Person> = emptyList(),
-        radiusKm: Int = 80,
+        radiusKm: Int = 50,
         maxResults: Int = 10
     ): List<MeetCandidate> {
         val result = if (persons.size >= 2) {
             val centers = persons.map { Pair(it.latitude, it.longitude) }
             queryOverpass(
                 query = buildSaPaQueryMulti(centers, radiusKm),
-                centerLat = centerLat,
-                centerLon = centerLon,
-                placeType = PlaceType.SA_PA,
-                defaultName = "サービスエリア",
-                maxResults = maxResults,
-                tag = "SA/PA(multi)"
+                centerLat, centerLon, PlaceType.SA_PA, "サービスエリア", maxResults, "SA/PA(multi)"
             )
         } else {
             queryOverpass(
                 query = buildSaPaQuery(centerLat, centerLon, radiusKm),
-                centerLat = centerLat,
-                centerLon = centerLon,
-                placeType = PlaceType.SA_PA,
-                defaultName = "サービスエリア",
-                maxResults = maxResults,
-                tag = "SA/PA"
+                centerLat, centerLon, PlaceType.SA_PA, "サービスエリア", maxResults, "SA/PA"
             )
         }
-
         if (result.isNotEmpty()) return result
 
-        // 0件 → 重心から大半径でリトライ
-        val retryRadius = 150
-        Log.w(TAG, "SA/PA 0件 → 重心から半径${retryRadius}kmでリトライ")
+        Log.w(TAG, "SA/PA 0件 → 重心から150kmでリトライ")
         return queryOverpass(
-            query = buildSaPaQuery(centerLat, centerLon, retryRadius),
-            centerLat = centerLat,
-            centerLon = centerLon,
-            placeType = PlaceType.SA_PA,
-            defaultName = "サービスエリア",
-            maxResults = maxResults,
-            tag = "SA/PA(retry)"
+            query = buildSaPaQuery(centerLat, centerLon, 150),
+            centerLat, centerLon, PlaceType.SA_PA, "サービスエリア", maxResults, "SA/PA(retry)"
         )
     }
 
-    // ──────────────────────────────────────────
-    //  駅 検索
-    // ──────────────────────────────────────────
+    // ─────────────────────────────────────────
+    // 駅 検索（電車モード用）
+    // ─────────────────────────────────────────
 
     /**
-     * 駅を検索する。
-     * - 参加者がいる場合 → 各人の出発地周辺を1リクエストでまとめて検索（30km）
-     * - 0件なら重心から150km でリトライ
+     * 重心から最も近い駅を探す。
+     * 半径を 5→10→20→50→100 km と段階的に拡大して確実に結果を返す。
+     *
+     * 複雑なマルチクエリは使わず、重心1点からの単純なクエリのみ使用する。
+     * これにより Overpass のメモリ制限・タイムアウトを回避する。
      */
-    suspend fun searchStations(
+    suspend fun searchNearestStations(
         centerLat: Double,
         centerLon: Double,
-        persons: List<Person> = emptyList(),
-        radiusKm: Int = 80,
-        maxResults: Int = 30
+        maxResults: Int = 5
     ): List<MeetCandidate> {
-        val result = if (persons.size >= 2) {
-            val centers = persons.map { Pair(it.latitude, it.longitude) }
-            queryOverpass(
-                query = buildStationQueryMulti(centers, perPersonRadiusKm = 30),
-                centerLat = centerLat,
-                centerLon = centerLon,
-                placeType = PlaceType.STATION,
-                defaultName = "駅",
-                maxResults = maxResults,
-                tag = "駅(multi)"
-            )
-        } else {
-            queryOverpass(
+        val radiusSteps = listOf(5, 10, 20, 50, 100)
+        for (radiusKm in radiusSteps) {
+            Log.d(TAG, "駅検索: 半径 ${radiusKm}km, center=($centerLat, $centerLon)")
+            val result = queryOverpass(
                 query = buildStationQuery(centerLat, centerLon, radiusKm),
                 centerLat = centerLat,
                 centerLon = centerLon,
                 placeType = PlaceType.STATION,
                 defaultName = "駅",
                 maxResults = maxResults,
-                tag = "駅"
+                tag = "駅(${radiusKm}km)"
             )
+            if (result.isNotEmpty()) {
+                Log.d(TAG, "駅: ${radiusKm}km で ${result.size}件ヒット")
+                return result
+            }
         }
-
-        if (result.isNotEmpty()) return result
-
-        // 0件 → 重心から大半径でリトライ
-        val retryRadius = 150
-        Log.w(TAG, "駅 0件 → 重心から半径${retryRadius}kmでリトライ")
-        return queryOverpass(
-            query = buildStationQuery(centerLat, centerLon, retryRadius),
-            centerLat = centerLat,
-            centerLon = centerLon,
-            placeType = PlaceType.STATION,
-            defaultName = "駅",
-            maxResults = maxResults,
-            tag = "駅(retry)"
-        )
+        Log.w(TAG, "駅: 100kmまで検索しても0件")
+        return emptyList()
     }
 
-    // ──────────────────────────────────────────
-    //  共通クエリ実行
-    // ──────────────────────────────────────────
+    // ─────────────────────────────────────────
+    // 共通クエリ実行
+    // ─────────────────────────────────────────
 
     private suspend fun queryOverpass(
         query: String,
@@ -145,10 +101,9 @@ class PlaceRepository @Inject constructor(
         maxResults: Int,
         tag: String
     ): List<MeetCandidate> = runCatching {
-        Log.d(TAG, "[$tag] Overpassリクエスト送信\nquery=\n$query")
+        Log.d(TAG, "[$tag] Overpassリクエスト送信")
         val response = overpassApi.query(query)
 
-        // Overpass がエラーを返した場合は remark にメッセージが入る
         if (response.remark != null) {
             Log.w(TAG, "[$tag] Overpass remark: ${response.remark}")
         }
@@ -175,9 +130,9 @@ class PlaceRepository @Inject constructor(
         emptyList()
     }
 
-    // ──────────────────────────────────────────
-    //  ユーティリティ
-    // ──────────────────────────────────────────
+    // ─────────────────────────────────────────
+    // ユーティリティ
+    // ─────────────────────────────────────────
 
     private fun List<MeetCandidate>.deduplicateByProximity(thresholdKm: Double): List<MeetCandidate> {
         val result = mutableListOf<MeetCandidate>()

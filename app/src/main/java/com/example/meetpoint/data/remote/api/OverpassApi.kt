@@ -27,14 +27,17 @@ fun buildSaPaQuery(lat: Double, lon: Double, radiusKm: Int = 50): String {
     """.trimIndent()
 }
 
-fun buildStationQuery(lat: Double, lon: Double, radiusKm: Int = 50): String {
+/**
+ * 重心近傍の駅を検索する最もシンプルなクエリ。
+ * 結果を距離順にソートして最大 10 件返す。
+ * radiusKm は呼び出し側が段階的に拡大する想定（5→10→20→50→100）。
+ */
+fun buildStationQuery(lat: Double, lon: Double, radiusKm: Int = 10): String {
     val r = radiusKm * 1000
     return """
-        [out:json][timeout:45];
-        (
-          node["railway"="station"]["name"](around:$r,$lat,$lon);
-        );
-        out 30;
+        [out:json][timeout:30];
+        node["railway"="station"]["name"](around:$r,$lat,$lon);
+        out 10;
     """.trimIndent()
 }
 

@@ -12,6 +12,7 @@ import com.example.meetpoint.domain.model.Person
 import com.example.meetpoint.domain.model.TravelMode
 import com.example.meetpoint.domain.usecase.CalcMeetPointUseCase
 import com.example.meetpoint.domain.usecase.CalcWaypointUseCase
+import android.util.Log
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -73,7 +74,12 @@ class AppViewModel @Inject constructor(
     sealed class UiState {
         object Idle : UiState()
         object Loading : UiState()
-        data class Success(val candidates: List<MeetCandidate>, val persons: List<Person>) : UiState()
+        data class Success(
+            val candidates: List<MeetCandidate>,
+            val persons: List<Person>,
+            /** true = Overpassが0件で重心フォールバック使用 */
+            val usedFallback: Boolean = false
+        ) : UiState()
         data class Error(val message: String) : UiState()
     }
 
@@ -166,8 +172,13 @@ class AppViewModel @Inject constructor(
             val center = centroidResult.first()
 
             val rawCandidates = when (_travelMode.value) {
-                TravelMode.DRIVE   -> placeRepository.searchSaPa(center.latitude, center.longitude)
-                TravelMode.TRANSIT -> placeRepository.searchStations(center.latitude, center.longitude)
+                TravelMode.DRIVE   -> placeRepository.searchSaPa(center.latitude, center.longitude, validPersons)
+                TravelMode.TRANSIT -> placeRepository.searchStations(center.latitude, center.longitude, validPersons)
+            }
+
+            val usedFallback = rawCandidates.isEmpty()
+            if (usedFallback) {
+                Log.w("AppViewModel", "Overpass 候補 0件 → 重心フォールバック使用")
             }
 
             val candidates = when (_appMode.value) {
@@ -201,7 +212,7 @@ class AppViewModel @Inject constructor(
                 }
             }
 
-            _uiState.value = UiState.Success(candidates, validPersons)
+            _uiState.value = UiState.Success(candidates, validPersons, usedFallback)
         }
     }
 }

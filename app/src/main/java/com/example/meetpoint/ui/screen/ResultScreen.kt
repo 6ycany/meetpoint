@@ -1,7 +1,9 @@
 package com.example.meetpoint.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,6 +25,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.meetpoint.ui.AppViewModel
@@ -36,6 +40,7 @@ fun ResultScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val personInputs by viewModel.personInputs.collectAsState()
+    val travelMode by viewModel.travelMode.collectAsState()
 
     val success = uiState as? AppViewModel.UiState.Success ?: return
 
@@ -67,7 +72,7 @@ fun ResultScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // --- 地図（上半分） ---
+            // ── 地図（上半分） ──
             MeetPointMapView(
                 persons = success.persons,
                 candidates = success.candidates,
@@ -76,7 +81,27 @@ fun ResultScreen(
                     .height(280.dp)
             )
 
-            // --- 候補カードリスト（下半分） ---
+            // ── 地図凡例 ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "🔵 出発地",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "🟢 1位  🟡 2位  🟠 3位",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // ── 候補カードリスト（下半分） ──
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -85,6 +110,34 @@ fun ResultScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // Overpass が0件だったときの注意書き
+                if (success.usedFallback) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.tertiaryContainer,
+                                MaterialTheme.shapes.small
+                            )
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            text = "近くに${if (travelMode.name == "TRANSIT") "駅" else "SA/PA"}が見つからなかったため、" +
+                                    "全員の中間地点を表示しています。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+
                 Text(
                     text = "上位 ${success.candidates.size} 件",
                     style = MaterialTheme.typography.titleSmall,

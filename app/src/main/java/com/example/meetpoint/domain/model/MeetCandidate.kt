@@ -15,6 +15,7 @@ data class MeetCandidate(
     val latitude: Double,
     val longitude: Double,
     val placeType: PlaceType,
+    val address: String = "",          // 住所文字列（Overpassタグから生成）
     val distancesKm: List<Double> = emptyList(),
     val fairnessScore: Double = 0.0,
     val fairnessGrade: FairnessGrade = FairnessGrade.C

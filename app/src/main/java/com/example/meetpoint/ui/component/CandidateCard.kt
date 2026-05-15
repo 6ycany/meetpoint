@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.meetpoint.domain.model.FairnessGrade
 import com.example.meetpoint.domain.model.MeetCandidate
+import com.example.meetpoint.domain.model.PlaceType
 
 @Composable
 fun CandidateCard(
@@ -48,20 +50,24 @@ fun CandidateCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
 
-            // --- ヘッダー（ランク・名称・公平グレード） ---
+            // ── ヘッダー（ランク・種別バッジ・名称・公平グレード） ──
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${rank}位",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${rank}位",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        PlaceTypeBadge(candidate.placeType)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = candidate.name,
                         style = MaterialTheme.typography.titleMedium,
@@ -71,23 +77,59 @@ fun CandidateCard(
                 GradeBadge(grade = candidate.fairnessGrade)
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // ── 住所 ──
+            val addressText = candidate.address.ifBlank {
+                // 住所タグがない場合は座標を表示
+                "${"%.4f".format(candidate.latitude)}, ${"%.4f".format(candidate.longitude)}"
+            }
+            Text(
+                text = addressText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
 
-            // --- 各参加者の移動距離 ---
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // ── 各参加者の移動距離 ──
             if (candidate.distancesKm.isNotEmpty()) {
+                Text(
+                    text = "各出発地からの距離",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 candidate.distancesKm.forEachIndexed { i, dist ->
                     val name = personNames.getOrElse(i) { "参加者${i + 1}" }
-                    Text(
-                        text = "  $name: ${"%.1f".format(dist)} km",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    val distText = if (dist < 1.0) {
+                        "${"%.0f".format(dist * 1000)} m"
+                    } else {
+                        "${"%.1f".format(dist)} km"
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "  $name",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = distText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // --- Googleマップで開くボタン ---
+            // ── Googleマップで開くボタン ──
             Button(
                 onClick = {
                     val uri = Uri.parse(
@@ -96,7 +138,6 @@ fun CandidateCard(
                     val intent = Intent(Intent.ACTION_VIEW, uri).apply {
                         setPackage("com.google.android.apps.maps")
                     }
-                    // Googleマップが未インストールの場合はブラウザで開く
                     if (intent.resolveActivity(context.packageManager) != null) {
                         context.startActivity(intent)
                     } else {
@@ -111,9 +152,21 @@ fun CandidateCard(
                     containerColor = MaterialTheme.colorScheme.secondary
                 )
             ) {
-                Text("Googleマップで開く")
+                Text("🗺️  Googleマップで開く")
             }
         }
+    }
+}
+
+@Composable
+private fun PlaceTypeBadge(placeType: PlaceType) {
+    val (text, color) = when (placeType) {
+        PlaceType.STATION -> "🚆 駅" to Color(0xFF1565C0)
+        PlaceType.SA_PA   -> "🛣️ SA/PA" to Color(0xFF2E7D32)
+        PlaceType.POINT   -> "📍 中間地点" to Color(0xFF6A1B9A)
+    }
+    Badge(containerColor = color) {
+        Text(text = text, color = Color.White, style = MaterialTheme.typography.labelSmall)
     }
 }
 

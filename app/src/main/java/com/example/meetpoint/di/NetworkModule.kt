@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -25,20 +26,40 @@ object NetworkModule {
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
+    /** Google API 用 OkHttpClient（標準タイムアウト） */
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    @Named("google")
+    fun provideGoogleOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
         .addInterceptor(
-            HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            }
+            HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
+        )
+        .build()
+
+    /**
+     * Overpass API 用 OkHttpClient。
+     * Overpass クエリは最大 30〜60 秒かかるため、readTimeout を 90 秒に設定。
+     * デフォルトの 10 秒だと必ずタイムアウトして 0 件になる。
+     */
+    @Provides
+    @Singleton
+    @Named("overpass")
+    fun provideOverpassOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor(
+            HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
         )
         .build()
 
     @Provides
     @Singleton
     @Named("google")
-    fun provideGoogleRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+    fun provideGoogleRetrofit(@Named("google") okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://maps.googleapis.com/")
             .client(okHttpClient)
@@ -48,7 +69,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("overpass")
-    fun provideOverpassRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+    fun provideOverpassRetrofit(@Named("overpass") okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://overpass-api.de/")
             .client(okHttpClient)
